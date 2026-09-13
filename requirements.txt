@@ -1,0 +1,7 @@
+pyTelegramBotAPI
+requests
+beautifulsoup4
+pytz
+schedule
+python-dotenv
+flask

@@ -4,6 +4,7 @@ import threading
 import time as time_module
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from flask import Flask
 import pytz
 import requests
 import schedule
@@ -22,13 +23,26 @@ WORK_END = time(19, 0)  # 19:00
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
+app = Flask('')
 
+
+@app.route('/')
+def home():
+  return 'Bot is active and running!'
+
+
+def run_web_server():
+  port = int(os.environ.get('PORT', 8080))
+  app.run(host='0.0.0.0', port=port)
+
+
+# ==================== ПАРСИНГ ТА ЛОГІКА ====================
 def fetch_channel_events_for_range(start_date, end_date):
   """Парсить канал та класифікує події на red (червона), yellow (жовта) та end (відбій)."""
   headers = {
-      "User-Agent": (
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      'User-Agent': (
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          ' (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       )
   }
 
@@ -40,7 +54,7 @@ def fetch_channel_events_for_range(start_date, end_date):
 
   for _ in range(15):  # Глибина пагінації (до ~300 повідомлень)
     fetch_url = (
-        f"{CHANNEL_URL}?before={before_msg_id}"
+        f'{CHANNEL_URL}?before={before_msg_id}'
         if before_msg_id
         else CHANNEL_URL
     )
@@ -49,11 +63,11 @@ def fetch_channel_events_for_range(start_date, end_date):
       response = requests.get(fetch_url, headers=headers, timeout=10)
       response.raise_for_status()
     except Exception as e:
-      print(f"Parsing error: {e}")
+      print(f'Parsing error: {e}')
       break
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    messages = soup.find_all("div", class_="tgme_widget_message")
+    soup = BeautifulSoup(response.text, 'html.parser')
+    messages = soup.find_all('div', class_='tgme_widget_message')
 
     if not messages:
       break
@@ -61,47 +75,47 @@ def fetch_channel_events_for_range(start_date, end_date):
     min_dt_in_page = None
 
     for msg in messages:
-      data_post = msg.get("data-post")
+      data_post = msg.get('data-post')
       if not data_post:
         continue
 
-      time_tag = msg.find("time", class_="time")
-      text_div = msg.find("div", class_="tgme_widget_message_text")
+      time_tag = msg.find('time', class_='time')
+      text_div = msg.find('div', class_='tgme_widget_message_text')
 
       if not time_tag or not text_div:
         continue
 
-      dt_str = time_tag.get("datetime")
+      dt_str = time_tag.get('datetime')
       if not dt_str:
         continue
 
-      dt_utc = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+      dt_utc = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
       dt_kyiv = dt_utc.astimezone(TIMEZONE)
 
       if min_dt_in_page is None or dt_kyiv < min_dt_in_page:
         min_dt_in_page = dt_kyiv
 
       text = text_div.text.lower()
-      is_end = "відбій" in text or "✅" in text
+      is_end = 'відбій' in text or '✅' in text
 
       if is_end:
-        events_dict[data_post] = (dt_kyiv, "end")
+        events_dict[data_post] = (dt_kyiv, 'end')
       else:
-        is_yellow = "жовтий" in text or "🟡" in text
+        is_yellow = 'жовтий' in text or '🟡' in text
         is_red = (
-            "червоний" in text
-            or "🔴" in text
-            or ("оголошено" in text and not is_yellow)
+            'червоний' in text
+            or '🔴' in text
+            or ('оголошено' in text and not is_yellow)
         )
 
         if is_red:
-          events_dict[data_post] = (dt_kyiv, "red")
+          events_dict[data_post] = (dt_kyiv, 'red')
         elif is_yellow:
-          events_dict[data_post] = (dt_kyiv, "yellow")
+          events_dict[data_post] = (dt_kyiv, 'yellow')
 
-    first_post = messages[0].get("data-post")
-    if first_post and "/" in first_post:
-      before_msg_id = first_post.split("/")[-1]
+    first_post = messages[0].get('data-post')
+    if first_post and '/' in first_post:
+      before_msg_id = first_post.split('/')[-1]
     else:
       break
 
@@ -142,9 +156,9 @@ def calculate_alarm_stats(start_date, end_date):
           dur = (eff_end - eff_start).total_seconds()
           daily_seconds[curr_d] = daily_seconds.get(curr_d, 0) + dur
 
-          if level == "red":
+          if level == 'red':
             daily_red_sec[curr_d] = daily_red_sec.get(curr_d, 0) + dur
-          elif level == "yellow":
+          elif level == 'yellow':
             daily_yellow_sec[curr_d] = daily_yellow_sec.get(curr_d, 0) + dur
 
           if curr_d not in daily_details:
@@ -156,12 +170,12 @@ def calculate_alarm_stats(start_date, end_date):
       curr_d += timedelta(days=1)
 
   for dt, ev_type in events:
-    if ev_type in ["red", "yellow"]:
+    if ev_type in ['red', 'yellow']:
       if current_level is not None:
         process_interval(alert_start, dt, current_level)
       current_level = ev_type
       alert_start = dt
-    elif ev_type == "end":
+    elif ev_type == 'end':
       if current_level is not None:
         process_interval(alert_start, dt, current_level)
         current_level = None
@@ -204,28 +218,28 @@ def calculate_work_and_open_time(target_date, closed_seconds):
 # ==================== ТЕЛЕГРАМ ІНТЕРФЕЙС ====================
 def get_main_keyboard():
   markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-  btn_today = types.KeyboardButton("📊 За сьогодні")
-  btn_week = types.KeyboardButton("📅 За 7 днів")
-  btn_status = types.KeyboardButton("🔴/🟡 Статус зараз")
+  btn_today = types.KeyboardButton('📊 За сьогодні')
+  btn_week = types.KeyboardButton('📅 За 7 днів')
+  btn_status = types.KeyboardButton('🔴/🟡 Статус зараз')
   markup.add(btn_today, btn_week)
   markup.add(btn_status)
   return markup
 
 
-@bot.message_handler(commands=["start", "help"])
+@bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
   msg = (
-      "👋 <b>Привіт! Я бот-помічник для обліку тривог.</b>\n\n"
-      "Я враховую 🔴 Червоний та 🟡 Жовтий рівні тривог і розраховую час простою"
-      " в робочі години (10:00 — 19:00)."
+      '👋 <b>Привіт! Я бот-помічник для обліку тривог.</b>\n\n'
+      'Я враховую 🔴 Червоний та 🟡 Жовтий рівні тривог і розраховую час простою'
+      ' в робочі години (10:00 — 19:00).'
   )
   bot.send_message(
-      message.chat.id, msg, parse_mode="HTML", reply_markup=get_main_keyboard()
+      message.chat.id, msg, parse_mode='HTML', reply_markup=get_main_keyboard()
   )
 
 
 @bot.message_handler(
-    func=lambda msg: msg.text in ["📊 За сьогодні", "📊 За сегодня", "/today"]
+    func=lambda msg: msg.text in ['📊 За сьогодні', '📊 За сегодня', '/today']
 )
 def handle_today(message):
   today = datetime.now(TIMEZONE).date()
@@ -245,9 +259,9 @@ def handle_today(message):
 
   msg = (
       f"📊 <b>Звіт за сьогодні ({today.strftime('%d.%m.%Y')})</b>\n⏰ Робочі"
-      f" години: 10:00 — 19:00\n\n"
+      ' години: 10:00 — 19:00\n\n'
   )
-  msg += f"✅ <b>Магазин працював:</b> {open_h} год {open_m} хв\n"
+  msg += f'✅ <b>Магазин працював:</b> {open_h} год {open_m} хв\n'
 
   if total_closed_sec > 0:
     red_sec = daily_red_sec.get(today, 0)
@@ -256,25 +270,25 @@ def handle_today(message):
     r_h, r_m = int(red_sec // 3600), int((red_sec % 3600) // 60)
     y_h, y_m = int(yellow_sec // 3600), int((yellow_sec % 3600) // 60)
 
-    msg += f"🚨 <b>Загальний час простою:</b> {closed_h} год {closed_m} хв\n"
-    msg += f"├ 🔴 <b>Червоний рівень:</b> {r_h} год {r_m} хв\n"
-    msg += f"└ 🟡 <b>Жовтий рівень:</b> {y_h} год {y_m} хв\n\n"
+    msg += f'🚨 <b>Загальний час простою:</b> {closed_h} год {closed_m} хв\n'
+    msg += f'├ 🔴 <b>Червоний рівень:</b> {r_h} год {r_m} хв\n'
+    msg += f'└ 🟡 <b>Жовтий рівень:</b> {y_h} год {y_m} хв\n\n'
 
-    msg += "<b>Інтервали тривог:</b>\n"
+    msg += '<b>Інтервали тривог:</b>\n'
     for start, end, dur, lvl in daily_det.get(today, []):
       h = int(dur.total_seconds() // 3600)
       m = int((dur.total_seconds() % 3600) // 60)
-      dur_str = f"{h}год {m}хв" if h > 0 else f"{m} хв"
-      icon = "🔴" if lvl == "red" else "🟡"
+      dur_str = f'{h}год {m}хв' if h > 0 else f'{m} хв'
+      icon = '🔴' if lvl == 'red' else '🟡'
       msg += f"• {icon} {start.strftime('%H:%M')} — {end.strftime('%H:%M')} ({dur_str})\n"
   else:
-    msg += "🎉 <b>У робочий час тривог поки не було!</b>"
+    msg += '🎉 <b>У робочий час тривог поки не було!</b>'
 
-  bot.send_message(message.chat.id, msg, parse_mode="HTML")
+  bot.send_message(message.chat.id, msg, parse_mode='HTML')
 
 
 @bot.message_handler(
-    func=lambda msg: msg.text in ["📅 За 7 днів", "📅 За 7 дней", "/week"]
+    func=lambda msg: msg.text in ['📅 За 7 днів', '📅 За 7 дней', '/week']
 )
 def handle_week(message):
   today = datetime.now(TIMEZONE).date()
@@ -295,7 +309,7 @@ def handle_week(message):
   )
 
   msg = (
-      f"📅 <b>Статистика за останні 7 днів</b>\n({start_week.strftime('%d.%m')} —"
+      f'📅 <b>Статистика за останні 7 днів</b>\n({start_week.strftime("%d.%m")} —'
       f" {today.strftime('%d.%m.%Y')})\n\n"
   )
 
@@ -303,33 +317,33 @@ def handle_week(message):
   while curr_d <= today:
     sec = daily_sec.get(curr_d, 0)
     h, m = int(sec // 3600), int((sec % 3600) // 60)
-    day_str = curr_d.strftime("%d.%m (%a)")
+    day_str = curr_d.strftime('%d.%m (%a)')
 
     if sec > 0:
       r_s = daily_red_sec.get(curr_d, 0)
       y_s = daily_yellow_sec.get(curr_d, 0)
-      r_str = f"{int(r_s//3600)}г {int((r_s%3600)//60)}хв"
-      y_str = f"{int(y_s//3600)}г {int((y_s%3600)//60)}хв"
+      r_str = f'{int(r_s//3600)}г {int((r_s%3600)//60)}хв'
+      y_str = f'{int(y_s//3600)}г {int((y_s%3600)//60)}хв'
 
       msg += (
-          f"• <b>{day_str}:</b> {h}г {m}хв (🔴 {r_str} | 🟡"
-          f" {y_str})\n"
+          f'• <b>{day_str}:</b> {h}г {m}хв (🔴 {r_str} | 🟡'
+          f' {y_str})\n'
       )
     else:
-      msg += f"• <b>{day_str}:</b> тривог не було ✨\n"
+      msg += f'• <b>{day_str}:</b> тривог не було ✨\n'
     curr_d += timedelta(days=1)
 
-  msg += f"\n🚨 <b>УСЬОГО простою за 7 днів:</b> {w_hours} год {w_minutes} хв"
-  bot.send_message(message.chat.id, msg, parse_mode="HTML")
+  msg += f'\n🚨 <b>УСЬОГО простою за 7 днів:</b> {w_hours} год {w_minutes} хв'
+  bot.send_message(message.chat.id, msg, parse_mode='HTML')
 
 
 @bot.message_handler(
     func=lambda msg: msg.text
     in [
-        "🔴/🟡 Статус зараз",
-        "🔴 Статус зараз",
-        "🔴 Статус сейчас",
-        "/status",
+        '🔴/🟡 Статус зараз',
+        '🔴 Статус зараз',
+        '🔴 Статус сейчас',
+        '/status',
     ]
 )
 def handle_status(message):
@@ -342,21 +356,21 @@ def handle_status(message):
     dur = now - alert_start
     h, m = int(dur.total_seconds() // 3600), int((dur.total_seconds() % 3600) // 60)
     lvl_name = (
-        "🔴 ЧЕРВОНИЙ РІВЕНЬ" if current_level == "red" else "🟡 ЖОВТИЙ РІВЕНЬ"
+        '🔴 ЧЕРВОНИЙ РІВЕНЬ' if current_level == 'red' else '🟡 ЖОВТИЙ РІВЕНЬ'
     )
 
     msg = (
-        f"⚠️ <b>Зараз лунає тривога!</b> ({lvl_name})\n"
+        f'⚠️ <b>Зараз лунає тривога!</b> ({lvl_name})\n'
         f"Розпочалася о: {alert_start.strftime('%H:%M')}\n"
-        f"Триває вже: {h}год {m}хв\n\n"
-        f"🚨 Магазин зачинено."
+        f'Триває вже: {h}год {m}хв\n\n'
+        f'🚨 Магазин зачинено.'
     )
   else:
     msg = (
-        "🟢 <b>Зараз тривоги немає!</b>\nМагазин працює в звичайному режимі."
+        '🟢 <b>Зараз тривоги немає!</b>\nМагазин працює в звичайному режимі.'
     )
 
-  bot.send_message(message.chat.id, msg, parse_mode="HTML")
+  bot.send_message(message.chat.id, msg, parse_mode='HTML')
 
 
 def send_daily_report():
@@ -376,10 +390,10 @@ def send_daily_report():
   )
 
   msg = (
-      f"📊 <b>Щоденний звіт по тривогах</b>\n📅 Дата:"
+      f'📊 <b>Щоденний звіт по тривогах</b>\n📅 Дата:'
       f" {today.strftime('%d.%m.%Y')}\n⏰ Робочий час: 10:00 — 19:00\n\n"
   )
-  msg += f"✅ <b>Магазин працював:</b> {open_h} год {open_m} хв\n"
+  msg += f'✅ <b>Магазин працював:</b> {open_h} год {open_m} хв\n'
 
   if total_closed_sec > 0:
     red_sec = daily_red_sec.get(today, 0)
@@ -387,38 +401,43 @@ def send_daily_report():
     r_h, r_m = int(red_sec // 3600), int((red_sec % 3600) // 60)
     y_h, y_m = int(yellow_sec // 3600), int((yellow_sec % 3600) // 60)
 
-    msg += f"🚨 <b>Загальний час простою:</b> {closed_h} год {closed_m} хв\n"
-    msg += f"├ 🔴 <b>Червоний рівень:</b> {r_h} год {r_m} хв\n"
-    msg += f"└ 🟡 <b>Жовтий рівень:</b> {y_h} год {y_m} хв\n\n"
+    msg += f'🚨 <b>Загальний час простою:</b> {closed_h} год {closed_m} хв\n'
+    msg += f'├ 🔴 <b>Червоний рівень:</b> {r_h} год {r_m} хв\n'
+    msg += f'└ 🟡 <b>Жовтий рівень:</b> {y_h} год {y_m} хв\n\n'
 
-    msg += "<b>Деталізація:</b>\n"
+    msg += '<b>Деталізація:</b>\n'
     for start, end, dur, lvl in daily_det.get(today, []):
       h = int(dur.total_seconds() // 3600)
       m = int((dur.total_seconds() % 3600) // 60)
-      dur_str = f"{h}год {m}хв" if h > 0 else f"{m} хв"
-      icon = "🔴" if lvl == "red" else "🟡"
+      dur_str = f'{h}год {m}хв' if h > 0 else f'{m} хв'
+      icon = '🔴' if lvl == 'red' else '🟡'
       msg += f"• {icon} {start.strftime('%H:%M')} — {end.strftime('%H:%M')} ({dur_str})\n"
   else:
     msg += (
-        "🎉 <b>У робочий час тривог не було!</b> Магазин працював увесь день."
+        '🎉 <b>У робочий час тривог не було!</b> Магазин працював увесь день.'
     )
 
   if CHAT_ID:
     try:
-      bot.send_message(CHAT_ID, msg, parse_mode="HTML")
+      bot.send_message(CHAT_ID, msg, parse_mode='HTML')
     except Exception as e:
-      print(f"Помилка автоматичної відправки: {e}")
+      print(f'Помилка автоматичної відправки: {e}')
 
 
 def run_scheduler():
-  schedule.every().day.at("19:05").do(send_daily_report)
+  schedule.every().day.at('19:05').do(send_daily_report)
   while True:
     schedule.run_pending()
     time_module.sleep(30)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+  # 1. Запускаємо легкий веб-сервер Flask для Render
+  threading.Thread(target=run_web_server, daemon=True).start()
+
+  # 2. Запускаємо планировщик завдань
   threading.Thread(target=run_scheduler, daemon=True).start()
 
-  print("Інтерактивний бот запущений...")
+  # 3. Запускаємо інтерактивного бота
+  print('Інтерактивний бот запущений разом із веб-сервером...')
   bot.infinity_polling()
