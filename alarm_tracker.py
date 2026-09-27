@@ -55,7 +55,7 @@ def fetch_channel_events_for_range(start_date, end_date, channel_url):
     events_dict = {}
     before_msg_id = None
 
-    for _ in range(15): 
+    for _ in range(60): 
         fetch_url = f"{channel_url}?before={before_msg_id}" if before_msg_id else channel_url
 
         try:
