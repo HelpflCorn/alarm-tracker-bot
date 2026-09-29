@@ -17,9 +17,10 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 TIMEZONE = pytz.timezone("Europe/Kyiv")
 
+# Словник із джерелами сповіщень
 REGIONS = {
     "dp": {"name": "Дніпро", "url": "https://t.me/s/sirena_dp"},
-    "zp": {"name": "Запоріжжя", "url": "https://t.me/s/vozdushnaya_trevoga_zaporozhe"}
+    "zp": {"name": "Запоріжжя", "url": "https://t.me/s/sirenazaporizhzhia"}
 }
 
 # Збереження обраного регіону для кожного чату (за замовчуванням: 'dp')
@@ -95,13 +96,23 @@ def fetch_channel_events_for_range(start_date, end_date, channel_url):
                 min_dt_in_page = dt_kyiv
 
             text = text_div.text.lower()
-            is_end = "відбій" in text or "✅" in text
+            
+            # Перевірка на відбій тривоги
+            is_end = "відбій" in text or "✅" in text or "🟢" in text
 
             if is_end:
                 events_dict[data_post] = (dt_kyiv, 'end')
             else:
+                # Перевірка на жовтий та червоний рівні
                 is_yellow = "жовтий" in text or "🟡" in text
-                is_red = "червоний" in text or "🔴" in text or ("оголошено" in text and not is_yellow)
+                is_red = (
+                    "червоний" in text 
+                    or "🔴" in text 
+                    or "‼️" in text 
+                    or "🚨" in text 
+                    or ("повітряна тривога" in text and not is_yellow)
+                    or ("оголошено" in text and not is_yellow)
+                )
 
                 if is_red:
                     events_dict[data_post] = (dt_kyiv, 'red')
