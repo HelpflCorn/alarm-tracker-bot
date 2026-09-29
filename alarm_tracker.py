@@ -55,7 +55,7 @@ def fetch_channel_events_for_range(start_date, end_date, channel_url):
     events_dict = {}
     before_msg_id = None
 
-    for _ in range(60): 
+    for page in range(50):
         fetch_url = f"{channel_url}?before={before_msg_id}" if before_msg_id else channel_url
 
         try:
@@ -108,16 +108,19 @@ def fetch_channel_events_for_range(start_date, end_date, channel_url):
                 elif is_yellow:
                     events_dict[data_post] = (dt_kyiv, 'yellow')
 
-        first_post = messages[0].get('data-post')
-        if first_post and '/' in first_post:
-            before_msg_id = first_post.split('/')[-1]
+        # Витягуємо ID найстарішого (першого) повідомлення на сторінці для наступної ітерації
+        first_post_data = messages[0].get('data-post')
+        if first_post_data and '/' in first_post_data:
+            before_msg_id = first_post_data.split('/')[-1]
         else:
             break
+
+        print(f"Page {page+1}: fetched up to {min_dt_in_page.strftime('%Y-%m-%d %H:%M') if min_dt_in_page else 'N/A'}, before_id={before_msg_id}")
 
         if min_dt_in_page and min_dt_in_page < target_start_dt:
             break
 
-        time_module.sleep(0.3)
+        time_module.sleep(0.1)
 
     sorted_events = sorted(events_dict.values(), key=lambda x: x[0])
     return sorted_events
